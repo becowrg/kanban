@@ -137,6 +137,8 @@
         const LOCAL_STORAGE_KEY = 'kanbanBoardState';
 
         // --- DOM Elements ---
+        // It's good practice to ensure elements exist before using them,
+        // especially if the script runs before the full DOM is ready (though DOMContentLoaded helps).
         const board = document.getElementById('board');
         const addColumnBtn = document.getElementById('addColumnBtn');
         const cardModal = document.getElementById('cardModal');
@@ -183,6 +185,7 @@
             card.dataset.remainingTime = cardData.remainingTime !== undefined ? cardData.remainingTime : (WORK_MINUTES * 60);
             card.dataset.isWorkPhase = cardData.isWorkPhase !== undefined ? String(cardData.isWorkPhase) : 'true';
 
+            // Added Duplicate button
             card.innerHTML = `
                 <p class="card-text text-sm mb-3 break-words">${cardData.text || ''}</p>
                 <div class="timer-display text-center font-mono text-xl font-semibold text-slate-700 mb-2">
@@ -192,27 +195,31 @@
                     <button class="start-timer-btn bg-green-100 hover:bg-green-200 text-green-700 p-1 rounded" title="Start Timer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
                     <button class="pause-timer-btn bg-yellow-100 hover:bg-yellow-200 text-yellow-700 p-1 rounded hidden" title="Pause Timer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg></button>
                     <button class="reset-timer-btn bg-red-100 hover:bg-red-200 text-red-700 p-1 rounded" title="Reset Timer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
+                    <button class="duplicate-card-btn bg-blue-100 hover:bg-blue-200 text-blue-700 p-1 rounded" title="Duplicate Card"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
                     <button class="delete-card-btn bg-slate-100 hover:bg-slate-200 text-slate-500 p-1 rounded ml-auto" title="Delete Card"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-3.5 h-3.5"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></button>
                 </div>
                 <div class="timer-status text-xs text-center text-slate-500 mt-1 h-4"></div>
             `;
 
-            // Add event listeners
+            // Add event listeners - Added checks for element existence
             card.addEventListener('dragstart', handleCardDragStart);
             card.addEventListener('dragend', handleCardDragEnd);
             const startBtn = card.querySelector('.start-timer-btn');
             const pauseBtn = card.querySelector('.pause-timer-btn');
             const resetBtn = card.querySelector('.reset-timer-btn');
+            const duplicateBtn = card.querySelector('.duplicate-card-btn');
             const deleteBtn = card.querySelector('.delete-card-btn');
-            const cardTextP = card.querySelector('.card-text'); // Get the paragraph element
+            const cardTextP = card.querySelector('.card-text');
 
-            startBtn.addEventListener('click', () => startTimer(card));
-            pauseBtn.addEventListener('click', () => pauseTimer(card));
-            resetBtn.addEventListener('click', () => resetTimer(card));
-            deleteBtn.addEventListener('click', () => deleteCard(card));
-            // Add listener for editing card text
-            if (cardTextP) { // Ensure paragraph exists before adding listener
+            if(startBtn) startBtn.addEventListener('click', () => startTimer(card));
+            if(pauseBtn) pauseBtn.addEventListener('click', () => pauseTimer(card));
+            if(resetBtn) resetBtn.addEventListener('click', () => resetTimer(card));
+            if(duplicateBtn) duplicateBtn.addEventListener('click', () => duplicateCard(card)); // Check duplicateBtn
+            if(deleteBtn) deleteBtn.addEventListener('click', () => deleteCard(card));
+            if (cardTextP) {
                 cardTextP.addEventListener('dblclick', () => editCardText(cardTextP));
+            } else {
+                 console.warn("Card text paragraph not found for card:", card.id);
             }
 
             updateTimerDisplay(card);
@@ -235,235 +242,155 @@
                 </button>
             `;
 
-            // Add event listeners
+            // Add event listeners - Added checks for element existence
             const cardsContainer = column.querySelector('.cards-container');
             const addCardBtn = column.querySelector('.add-card-btn');
             const deleteColumnBtn = column.querySelector('.delete-column-btn');
             const columnHeader = column.querySelector('.column-header');
             const titleSpan = column.querySelector('.column-title');
-            cardsContainer.addEventListener('dragover', handleCardDragOver);
-            cardsContainer.addEventListener('dragleave', handleCardDragLeave);
-            cardsContainer.addEventListener('drop', handleCardDrop);
-            columnHeader.addEventListener('dragstart', handleColumnDragStart);
-            columnHeader.addEventListener('dragend', handleColumnDragEnd);
-            deleteColumnBtn.addEventListener('mousedown', e => e.stopPropagation());
-            addCardBtn.addEventListener('click', () => openCardModal(column));
-            deleteColumnBtn.addEventListener('click', () => deleteColumn(column));
-             if (titleSpan) { // Ensure title span exists before adding listener
+
+            if(cardsContainer) {
+                cardsContainer.addEventListener('dragover', handleCardDragOver);
+                cardsContainer.addEventListener('dragleave', handleCardDragLeave);
+                cardsContainer.addEventListener('drop', handleCardDrop);
+            }
+            if(columnHeader) {
+                columnHeader.addEventListener('dragstart', handleColumnDragStart);
+                columnHeader.addEventListener('dragend', handleColumnDragEnd);
+            }
+            if(deleteColumnBtn) {
+                deleteColumnBtn.addEventListener('mousedown', e => e.stopPropagation());
+                deleteColumnBtn.addEventListener('click', () => deleteColumn(column));
+            }
+            if(addCardBtn) {
+                addCardBtn.addEventListener('click', () => openCardModal(column));
+            }
+            if (titleSpan) {
                 titleSpan.addEventListener('dblclick', () => editColumnTitle(titleSpan));
              }
 
             // Add cards from columnData
             if (columnData.cards && Array.isArray(columnData.cards)) {
                 columnData.cards.forEach(cardData => {
-                    const newCard = createCardElement(cardData);
-                    cardsContainer.appendChild(newCard);
+                    // Ensure cardData is valid before creating element
+                    if(cardData && cardData.id) {
+                        const newCard = createCardElement(cardData);
+                        if(cardsContainer) cardsContainer.appendChild(newCard);
+                    } else {
+                        console.warn("Skipping invalid card data during column creation:", cardData);
+                    }
                 });
             }
             return column;
         }
 
         // --- Modal Control Functions ---
-        function openModal(modalElement) { modalElement.classList.remove('hidden'); modalElement.classList.add('flex'); }
-        function closeModal(modalElement) { modalElement.classList.add('hidden'); modalElement.classList.remove('flex'); }
-        function openCardModal(columnElement) { currentColumnToAddCard = columnElement; cardText.value = ''; openModal(cardModal); cardText.focus(); }
+        function openModal(modalElement) { if(modalElement) { modalElement.classList.remove('hidden'); modalElement.classList.add('flex'); } }
+        function closeModal(modalElement) { if(modalElement) { modalElement.classList.add('hidden'); modalElement.classList.remove('flex'); } }
+        function openCardModal(columnElement) { if(cardModal && cardText) { currentColumnToAddCard = columnElement; cardText.value = ''; openModal(cardModal); cardText.focus(); } }
         function closeCardModal() { closeModal(cardModal); currentColumnToAddCard = null; }
-        function openColumnModal() { columnNameInput.value = ''; openModal(columnModal); columnNameInput.focus(); }
+        function openColumnModal() { if(columnModal && columnNameInput) { columnNameInput.value = ''; openModal(columnModal); columnNameInput.focus(); } }
         function closeColumnModal() { closeModal(columnModal); }
-        function openExportModal() { exportData.value = getBoardStateAsJson(); openModal(exportModal); exportData.select(); }
+        function openExportModal() { if(exportModal && exportData) { exportData.value = getBoardStateAsJson(); openModal(exportModal); exportData.select(); } }
         function closeExportModal() { closeModal(exportModal); }
-        function openImportModal() { importData.value = ''; importError.classList.add('hidden'); openModal(importModal); importData.focus(); }
+        function openImportModal() { if(importModal && importData && importError) { importData.value = ''; importError.classList.add('hidden'); openModal(importModal); importData.focus(); } }
         function closeImportModal() { closeModal(importModal); }
 
-         // --- Add/Delete/Edit Functions ---
-        function addCardToColumn(columnElement, text) { if (!text || !text.trim()) return; const cardsContainer = columnElement.querySelector('.cards-container'); const cardId = generateId(); const cardData = { id: cardId, text: text.trim(), timerState: 'stopped', remainingTime: WORK_MINUTES * 60, isWorkPhase: true }; const newCard = createCardElement(cardData); cardsContainer.appendChild(newCard); saveBoardState(); }
-        function addColumn(name) { if (!name || !name.trim()) return; const columnId = generateId(); const columnData = { id: columnId, title: name.trim(), cards: [] }; const newColumn = createColumnElement(columnData); board.appendChild(newColumn); saveBoardState(); }
-        function deleteCard(cardElement) { clearInterval(parseInt(cardElement.dataset.timerInterval)); cardElement.remove(); saveBoardState(); }
-        function deleteColumn(columnElement) { const columnName = columnElement.querySelector('.column-title').textContent; if (confirm(`Are you sure you want to delete the "${columnName}" column and all its cards?`)) { columnElement.querySelectorAll('.kanban-card').forEach(card => { clearInterval(parseInt(card.dataset.timerInterval)); }); columnElement.remove(); saveBoardState(); } }
+         // --- Add/Delete/Edit/Duplicate Functions ---
+        function addCardToColumn(columnElement, text) { if (!columnElement || !text || !text.trim()) return; const cardsContainer = columnElement.querySelector('.cards-container'); if(!cardsContainer) return; const cardId = generateId(); const cardData = { id: cardId, text: text.trim(), timerState: 'stopped', remainingTime: WORK_MINUTES * 60, isWorkPhase: true }; const newCard = createCardElement(cardData); cardsContainer.appendChild(newCard); saveBoardState(); }
+        function addColumn(name) { if (!name || !name.trim()) return; const columnId = generateId(); const columnData = { id: columnId, title: name.trim(), cards: [] }; const newColumn = createColumnElement(columnData); if(board) board.appendChild(newColumn); saveBoardState(); }
+        function deleteCard(cardElement) { if(!cardElement) return; clearInterval(parseInt(cardElement.dataset.timerInterval)); cardElement.remove(); saveBoardState(); }
+        function deleteColumn(columnElement) { if(!columnElement) return; const titleSpan = columnElement.querySelector('.column-title'); const columnName = titleSpan ? titleSpan.textContent : 'this column'; if (confirm(`Are you sure you want to delete "${columnName}" and all its cards?`)) { columnElement.querySelectorAll('.kanban-card').forEach(card => { clearInterval(parseInt(card.dataset.timerInterval)); }); columnElement.remove(); saveBoardState(); } }
+        function editColumnTitle(titleSpan) { /* ... (logic unchanged, but includes internal checks) ... */ } // Keep previous robust version
+        function editCardText(cardTextP) { /* ... (logic unchanged, but includes internal checks) ... */ } // Keep previous robust version
 
-        /** Allows editing of a column title. */
-        function editColumnTitle(titleSpan) {
-            if (!titleSpan || draggedColumn) return; // Prevent edit while dragging column or if span doesn't exist
-            const columnHeader = titleSpan.closest('.column-header');
-            if (!columnHeader) return; // Ensure header exists
+        /** Duplicates a card element within the same column. */
+        function duplicateCard(originalCardElement) {
+            if (!originalCardElement) return;
+            const columnElement = originalCardElement.closest('.kanban-column');
+            if (!columnElement) {
+                 console.error("Could not duplicate card: Column not found.");
+                 return;
+            }
+            const cardsContainer = columnElement.querySelector('.cards-container'); // Get container from column
+            const originalTextP = originalCardElement.querySelector('.card-text');
+            const originalText = originalTextP ? originalTextP.textContent : undefined;
 
-            columnHeader.setAttribute('draggable', 'false'); // Disable drag during edit
-            const currentTitle = titleSpan.textContent;
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = currentTitle;
-            input.className = 'editing-column-input'; // Use specific class for styling
-            titleSpan.replaceWith(input);
-            input.focus();
-            input.select();
+            if (cardsContainer && originalText !== undefined) {
+                const newCardId = generateId();
+                const newCardData = {
+                    id: newCardId,
+                    text: originalText,
+                    timerState: 'stopped',
+                    remainingTime: WORK_MINUTES * 60,
+                    isWorkPhase: true
+                };
 
-            // Define listener functions *before* adding them
-            const handleKeyDown = (e) => {
-                if (e.key === 'Enter') {
-                    saveTitle();
-                } else if (e.key === 'Escape') {
-                    cancelEdit();
-                }
-            };
-
-            const saveTitle = () => {
-                cleanupListeners(); // Remove listeners first
-                const newTitle = input.value.trim();
-                // Create a new span to replace the input
-                const newTitleSpan = document.createElement('span');
-                newTitleSpan.className = 'column-title';
-                newTitleSpan.textContent = newTitle || currentTitle; // Use new title or revert if empty
-                newTitleSpan.addEventListener('dblclick', () => editColumnTitle(newTitleSpan)); // Re-attach listener
-
-                input.replaceWith(newTitleSpan); // Replace input with the new span
-                columnHeader.setAttribute('draggable', 'true'); // Re-enable drag
-
-                if (newTitle && newTitle !== currentTitle) {
-                    saveBoardState(); // Save state only if title actually changed
-                }
-            };
-
-             const cancelEdit = () => {
-                cleanupListeners(); // Remove listeners first
-                 // Revert: Create a new span with original title
-                const originalTitleSpan = document.createElement('span');
-                originalTitleSpan.className = 'column-title';
-                originalTitleSpan.textContent = currentTitle;
-                originalTitleSpan.addEventListener('dblclick', () => editColumnTitle(originalTitleSpan)); // Re-attach listener
-
-                input.replaceWith(originalTitleSpan);
-                columnHeader.setAttribute('draggable', 'true');
-            };
-
-            // Helper to remove listeners
-            const cleanupListeners = () => {
-                input.removeEventListener('blur', saveTitle);
-                input.removeEventListener('keydown', handleKeyDown);
-            };
-
-            // Add listeners
-            input.addEventListener('blur', saveTitle);
-            input.addEventListener('keydown', handleKeyDown);
+                const newCardElement = createCardElement(newCardData);
+                originalCardElement.insertAdjacentElement('afterend', newCardElement);
+                saveBoardState();
+            } else {
+                console.error("Could not duplicate card: Missing original text or container.", { cardsContainer, originalText });
+            }
         }
-
-        /** Allows editing of card text content. */
-        function editCardText(cardTextP) {
-            if (!cardTextP) return; // Safety check
-            const cardElement = cardTextP.closest('.kanban-card');
-            if (!cardElement || cardElement.classList.contains('dragging')) return; // Don't edit if dragging
-
-            cardElement.setAttribute('draggable', 'false'); // Disable drag during edit
-            const currentText = cardTextP.textContent;
-
-            const textarea = document.createElement('textarea');
-            textarea.value = currentText;
-            textarea.className = 'editing-card-textarea'; // Apply specific styling
-            textarea.rows = 3;
-
-            cardTextP.replaceWith(textarea);
-            textarea.focus();
-            textarea.select();
-
-             // Define listener functions *before* adding them
-            const handleKeyDown = (e) => {
-                // Shift+Enter for newline, Enter alone to save
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault(); // Prevent default Enter behavior (newline)
-                    saveCardEdit();
-                } else if (e.key === 'Escape') {
-                    cancelCardEdit();
-                }
-            };
-
-            const saveCardEdit = () => {
-                cleanupListeners(); // Remove listeners first
-                const newText = textarea.value; // Keep leading/trailing spaces if user intended
-                 // Create a new paragraph element
-                const newCardTextP = document.createElement('p');
-                newCardTextP.className = 'card-text text-sm mb-3 break-words';
-                newCardTextP.textContent = newText; // Use the new text directly
-                newCardTextP.addEventListener('dblclick', () => editCardText(newCardTextP)); // Re-attach listener!
-
-                textarea.replaceWith(newCardTextP); // Replace textarea with new <p>
-                cardElement.setAttribute('draggable', 'true'); // Re-enable drag
-
-                if (newText !== currentText) { // Check if text actually changed
-                    saveBoardState(); // Save state only if text actually changed
-                }
-            };
-
-             const cancelCardEdit = () => {
-                cleanupListeners(); // Remove listeners first
-                 // Revert: Create a new paragraph with original text
-                const originalCardTextP = document.createElement('p');
-                originalCardTextP.className = 'card-text text-sm mb-3 break-words';
-                originalCardTextP.textContent = currentText;
-                originalCardTextP.addEventListener('dblclick', () => editCardText(originalCardTextP)); // Re-attach listener!
-
-                textarea.replaceWith(originalCardTextP);
-                cardElement.setAttribute('draggable', 'true');
-            };
-
-             // Helper to remove listeners
-            const cleanupListeners = () => {
-                textarea.removeEventListener('blur', saveCardEdit);
-                textarea.removeEventListener('keydown', handleKeyDown);
-            };
-
-            // Add listeners
-            textarea.addEventListener('blur', saveCardEdit);
-            textarea.addEventListener('keydown', handleKeyDown);
-        }
-
 
         // --- Save/Load/Export/Import ---
-        function getBoardStateObject() { const state = { columns: [] }; document.querySelectorAll('.kanban-column').forEach(columnEl => { const columnData = { id: columnEl.dataset.columnId, title: columnEl.querySelector('.column-title').textContent, cards: [] }; columnEl.querySelectorAll('.kanban-card').forEach(cardEl => { columnData.cards.push({ id: cardEl.id, text: cardEl.querySelector('.card-text').textContent, timerState: cardEl.dataset.timerState, remainingTime: parseInt(cardEl.dataset.remainingTime), isWorkPhase: cardEl.dataset.isWorkPhase === 'true' }); }); state.columns.push(columnData); }); return state; }
+        function getBoardStateObject() { const state = { columns: [] }; document.querySelectorAll('.kanban-column').forEach(columnEl => { const titleSpan = columnEl.querySelector('.column-title'); const title = titleSpan ? titleSpan.textContent : 'Untitled'; const columnData = { id: columnEl.dataset.columnId, title: title, cards: [] }; columnEl.querySelectorAll('.kanban-card').forEach(cardEl => { const textP = cardEl.querySelector('.card-text'); const text = textP ? textP.textContent : ''; columnData.cards.push({ id: cardEl.id, text: text, timerState: cardEl.dataset.timerState, remainingTime: parseInt(cardEl.dataset.remainingTime), isWorkPhase: cardEl.dataset.isWorkPhase === 'true' }); }); state.columns.push(columnData); }); return state; } // Added checks for text/title elements
         function saveBoardState() { try { const state = getBoardStateObject(); localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state)); } catch (error) { console.error("Error saving board state:", error); } }
         function loadBoardState() { try { const savedState = localStorage.getItem(LOCAL_STORAGE_KEY); if (savedState) { const parsedState = JSON.parse(savedState); if (parsedState && parsedState.columns) { renderBoardFromJson(parsedState); return true; } } } catch (error) { console.error("Error loading board state:", error); localStorage.removeItem(LOCAL_STORAGE_KEY); } return false; }
-        function renderBoardFromJson(stateObject) { board.innerHTML = ''; if (stateObject && stateObject.columns && Array.isArray(stateObject.columns)) { stateObject.columns.forEach(columnData => { if (columnData && columnData.id && columnData.title != null) { const newColumn = createColumnElement(columnData); board.appendChild(newColumn); } else { console.warn("Skipping invalid column data during render:", columnData); } }); } else { console.error("Invalid data structure passed to renderBoardFromJson:", stateObject); } }
+        function renderBoardFromJson(stateObject) { if(!board) return; board.innerHTML = ''; if (stateObject && stateObject.columns && Array.isArray(stateObject.columns)) { stateObject.columns.forEach(columnData => { if (columnData && columnData.id && columnData.title != null) { const newColumn = createColumnElement(columnData); board.appendChild(newColumn); } else { console.warn("Skipping invalid column data during render:", columnData); } }); } else { console.error("Invalid data structure passed to renderBoardFromJson:", stateObject); } }
         function getBoardStateAsJson() { try { const state = getBoardStateObject(); return JSON.stringify(state, null, 2); } catch (error) { console.error("Error generating JSON:", error); return '{"error": "Could not generate JSON data."}'; } }
-        function handleImport() { const jsonString = importData.value; importError.classList.add('hidden'); if (!jsonString.trim()) { importError.textContent = "Import field is empty."; importError.classList.remove('hidden'); return; } try { const parsedData = JSON.parse(jsonString); if (parsedData && Array.isArray(parsedData.columns)) { if (confirm("Importing will replace the current board. Are you sure?")) { renderBoardFromJson(parsedData); saveBoardState(); closeImportModal(); } } else { throw new Error("Invalid data structure: 'columns' array not found."); } } catch (error) { console.error("Import error:", error); importError.textContent = `Invalid JSON data: ${error.message}. Please check the format.`; importError.classList.remove('hidden'); } }
+        function handleImport() { if(!importData || !importError) return; const jsonString = importData.value; importError.classList.add('hidden'); if (!jsonString.trim()) { importError.textContent = "Import field is empty."; importError.classList.remove('hidden'); return; } try { const parsedData = JSON.parse(jsonString); if (parsedData && Array.isArray(parsedData.columns)) { if (confirm("Importing will replace the current board. Are you sure?")) { renderBoardFromJson(parsedData); saveBoardState(); closeImportModal(); } } else { throw new Error("Invalid data structure: 'columns' array not found."); } } catch (error) { console.error("Import error:", error); importError.textContent = `Invalid JSON data: ${error.message}. Please check the format.`; importError.classList.remove('hidden'); } }
 
         // --- Drag and Drop Handlers ---
-        function handleCardDragStart(e) { if (e.target.classList.contains('kanban-card') && !e.target.querySelector('textarea')) { draggedCard = e.target; setTimeout(() => { if(draggedCard) draggedCard.classList.add('dragging'); }, 0); e.dataTransfer.setData('text/plain', e.target.id); e.dataTransfer.effectAllowed = 'move'; draggedColumn = null; } else { e.preventDefault(); } } // Added check for textarea
+        function handleCardDragStart(e) { if (e.target.classList.contains('kanban-card') && !e.target.querySelector('textarea')) { draggedCard = e.target; setTimeout(() => { if(draggedCard) draggedCard.classList.add('dragging'); }, 0); e.dataTransfer.setData('text/plain', e.target.id); e.dataTransfer.effectAllowed = 'move'; draggedColumn = null; } else { e.preventDefault(); } }
         function handleCardDragEnd(e) { if (draggedCard) draggedCard.classList.remove('dragging'); document.querySelectorAll('.cards-container.drag-over').forEach(el => el.classList.remove('drag-over')); draggedCard = null; }
         function handleCardDragOver(e) { if (!draggedCard) return; e.preventDefault(); const targetContainer = e.target.closest('.cards-container'); if (targetContainer) { e.dataTransfer.dropEffect = 'move'; targetContainer.classList.add('drag-over'); e.stopPropagation(); } else { e.dataTransfer.dropEffect = 'none'; } }
         function handleCardDragLeave(e) { if (!draggedCard) return; const targetContainer = e.target.closest('.cards-container'); if (targetContainer && (e.target === targetContainer || !targetContainer.contains(e.relatedTarget))) { targetContainer.classList.remove('drag-over'); } }
         function handleCardDrop(e) { if (!draggedCard) return; e.preventDefault(); const targetContainer = e.target.closest('.cards-container'); if (targetContainer) { e.stopPropagation(); targetContainer.classList.remove('drag-over'); const dropTargetCard = e.target.closest('.kanban-card'); if (dropTargetCard && dropTargetCard !== draggedCard) { targetContainer.insertBefore(draggedCard, dropTargetCard); } else if (!targetContainer.contains(draggedCard)) { targetContainer.appendChild(draggedCard); } saveBoardState(); } }
-        function handleColumnDragStart(e) { if (e.target.classList.contains('column-header') && !e.target.querySelector('input')) { draggedColumn = e.target.closest('.kanban-column'); draggedCard = null; setTimeout(() => { if(draggedColumn) draggedColumn.classList.add('column-dragging'); }, 0); e.dataTransfer.setData('text/plain', draggedColumn.dataset.columnId); e.dataTransfer.effectAllowed = 'move'; } else { e.preventDefault(); } } // Added check for input
+        function handleColumnDragStart(e) { if (e.target.classList.contains('column-header') && !e.target.querySelector('input')) { draggedColumn = e.target.closest('.kanban-column'); draggedCard = null; setTimeout(() => { if(draggedColumn) draggedColumn.classList.add('column-dragging'); }, 0); e.dataTransfer.setData('text/plain', draggedColumn.dataset.columnId); e.dataTransfer.effectAllowed = 'move'; } else { e.preventDefault(); } }
         function handleColumnDragEnd(e) { if (draggedColumn) draggedColumn.classList.remove('column-dragging'); removeColumnPlaceholder(); draggedColumn = null; }
-        function getDragAfterElement(container, x) { const draggableElements = [...container.querySelectorAll('.kanban-column:not(.column-dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = x - box.left - box.width / 2; if (offset < 0 && offset > closest.offset) return { offset: offset, element: child }; else return closest; }, { offset: Number.NEGATIVE_INFINITY }).element; }
+        function getDragAfterElement(container, x) { if(!container) return null; const draggableElements = [...container.querySelectorAll('.kanban-column:not(.column-dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = x - box.left - box.width / 2; if (offset < 0 && offset > closest.offset) return { offset: offset, element: child }; else return closest; }, { offset: Number.NEGATIVE_INFINITY }).element; }
         function handleBoardDragOver(e) { if (!draggedColumn) { if (draggedCard) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; } return; } e.preventDefault(); e.dataTransfer.dropEffect = 'move'; const afterElement = getDragAfterElement(board, e.clientX); removeColumnPlaceholder(); insertColumnPlaceholder(afterElement); }
-        function handleBoardDrop(e) { if (!draggedColumn) return; e.preventDefault(); const afterElement = getDragAfterElement(board, e.clientX); if (afterElement == null) { board.appendChild(draggedColumn); } else { board.insertBefore(draggedColumn, afterElement); } removeColumnPlaceholder(); saveBoardState(); }
+        function handleBoardDrop(e) { if (!draggedColumn || !board) return; e.preventDefault(); const afterElement = getDragAfterElement(board, e.clientX); if (afterElement == null) { board.appendChild(draggedColumn); } else { board.insertBefore(draggedColumn, afterElement); } removeColumnPlaceholder(); saveBoardState(); }
         let columnPlaceholder = null;
-        function insertColumnPlaceholder(beforeElement) { if (!columnPlaceholder) { columnPlaceholder = document.createElement('div'); columnPlaceholder.className = 'column-drop-placeholder'; } if (beforeElement == null) board.appendChild(columnPlaceholder); else board.insertBefore(columnPlaceholder, beforeElement); }
+        function insertColumnPlaceholder(beforeElement) { if (!columnPlaceholder) { columnPlaceholder = document.createElement('div'); columnPlaceholder.className = 'column-drop-placeholder'; } if(!board) return; if (beforeElement == null) board.appendChild(columnPlaceholder); else board.insertBefore(columnPlaceholder, beforeElement); }
         function removeColumnPlaceholder() { if (columnPlaceholder && columnPlaceholder.parentNode) { columnPlaceholder.parentNode.removeChild(columnPlaceholder); } columnPlaceholder = null; }
 
         // --- Pomodoro Timer Functions ---
         function formatTime(seconds) { const mins = Math.floor(seconds / 60); const secs = seconds % 60; return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`; }
-        function updateTimerDisplay(card) { const timerDisplay = card.querySelector('.timer-display'); const timerStatus = card.querySelector('.timer-status'); const remainingTime = parseInt(card.dataset.remainingTime); const state = card.dataset.timerState; const isWorkPhase = card.dataset.isWorkPhase === 'true'; timerDisplay.textContent = formatTime(remainingTime); let statusText = ''; if (state === 'running') statusText = isWorkPhase ? 'Work session...' : 'Break time!'; else if (state === 'paused') statusText = 'Timer paused'; else if (state === 'break') statusText = 'Break time!'; else statusText = isWorkPhase ? 'Ready to work' : 'Ready for break'; timerStatus.textContent = statusText; const startBtn = card.querySelector('.start-timer-btn'); const pauseBtn = card.querySelector('.pause-timer-btn'); startBtn.classList.toggle('hidden', state === 'running'); pauseBtn.classList.toggle('hidden', state !== 'running'); }
-        function startTimer(card) { let state = card.dataset.timerState; if (state === 'running') return; card.dataset.timerState = 'running'; updateTimerDisplay(card); clearInterval(parseInt(card.dataset.timerInterval)); const intervalId = setInterval(() => { let remainingTime = parseInt(card.dataset.remainingTime); remainingTime--; card.dataset.remainingTime = remainingTime; if (remainingTime <= 0) { clearInterval(intervalId); card.dataset.timerInterval = ''; handleTimerEnd(card); } else updateTimerDisplay(card); }, 1000); card.dataset.timerInterval = intervalId; }
-        function pauseTimer(card) { const state = card.dataset.timerState; if (state !== 'running') return; clearInterval(parseInt(card.dataset.timerInterval)); card.dataset.timerInterval = ''; card.dataset.timerState = 'paused'; updateTimerDisplay(card); }
-        function resetTimer(card) { clearInterval(parseInt(card.dataset.timerInterval)); card.dataset.timerInterval = ''; card.dataset.timerState = 'stopped'; card.dataset.isWorkPhase = 'true'; card.dataset.remainingTime = WORK_MINUTES * 60; updateTimerDisplay(card); }
-        function handleTimerEnd(card) { const isWorkPhase = card.dataset.isWorkPhase === 'true'; alert(isWorkPhase ? 'Work session complete! Time for a break.' : 'Break over! Time to get back to work.'); if (isWorkPhase) { card.dataset.isWorkPhase = 'false'; card.dataset.remainingTime = BREAK_MINUTES * 60; card.dataset.timerState = 'break'; } else { card.dataset.isWorkPhase = 'true'; card.dataset.remainingTime = WORK_MINUTES * 60; card.dataset.timerState = 'stopped'; } updateTimerDisplay(card); }
+        function updateTimerDisplay(card) { if(!card) return; const timerDisplay = card.querySelector('.timer-display'); const timerStatus = card.querySelector('.timer-status'); const startBtn = card.querySelector('.start-timer-btn'); const pauseBtn = card.querySelector('.pause-timer-btn'); if(!timerDisplay || !timerStatus || !startBtn || !pauseBtn) return; const remainingTime = parseInt(card.dataset.remainingTime); const state = card.dataset.timerState; const isWorkPhase = card.dataset.isWorkPhase === 'true'; timerDisplay.textContent = formatTime(remainingTime); let statusText = ''; if (state === 'running') statusText = isWorkPhase ? 'Work session...' : 'Break time!'; else if (state === 'paused') statusText = 'Timer paused'; else if (state === 'break') statusText = 'Break time!'; else statusText = isWorkPhase ? 'Ready to work' : 'Ready for break'; timerStatus.textContent = statusText; startBtn.classList.toggle('hidden', state === 'running'); pauseBtn.classList.toggle('hidden', state !== 'running'); }
+        function startTimer(card) { if(!card) return; let state = card.dataset.timerState; if (state === 'running') return; card.dataset.timerState = 'running'; updateTimerDisplay(card); clearInterval(parseInt(card.dataset.timerInterval)); const intervalId = setInterval(() => { let remainingTime = parseInt(card.dataset.remainingTime); remainingTime--; card.dataset.remainingTime = remainingTime; if (remainingTime <= 0) { clearInterval(intervalId); card.dataset.timerInterval = ''; handleTimerEnd(card); } else updateTimerDisplay(card); }, 1000); card.dataset.timerInterval = intervalId; }
+        function pauseTimer(card) { if(!card) return; const state = card.dataset.timerState; if (state !== 'running') return; clearInterval(parseInt(card.dataset.timerInterval)); card.dataset.timerInterval = ''; card.dataset.timerState = 'paused'; updateTimerDisplay(card); }
+        function resetTimer(card) { if(!card) return; clearInterval(parseInt(card.dataset.timerInterval)); card.dataset.timerInterval = ''; card.dataset.timerState = 'stopped'; card.dataset.isWorkPhase = 'true'; card.dataset.remainingTime = WORK_MINUTES * 60; updateTimerDisplay(card); }
+        function handleTimerEnd(card) { if(!card) return; const isWorkPhase = card.dataset.isWorkPhase === 'true'; alert(isWorkPhase ? 'Work session complete! Time for a break.' : 'Break over! Time to get back to work.'); if (isWorkPhase) { card.dataset.isWorkPhase = 'false'; card.dataset.remainingTime = BREAK_MINUTES * 60; card.dataset.timerState = 'break'; } else { card.dataset.isWorkPhase = 'true'; card.dataset.remainingTime = WORK_MINUTES * 60; card.dataset.timerState = 'stopped'; } updateTimerDisplay(card); }
+
 
         // --- Initial Setup ---
         function initializeBoard() {
+            console.log("Initializing board...");
+             // Ensure essential elements exist
+            if (!board || !addColumnBtn || !cardModal || !columnModal || !exportModal || !importModal) {
+                console.error("Initialization failed: Essential DOM elements not found.");
+                return;
+            }
+
             const loaded = loadBoardState();
             if (!loaded) {
                 console.log("No saved state found, creating default columns.");
                 addColumn('To Do');
                 addColumn('In Progress');
             }
-            // Add Global Event Listeners
+
+            // Add Global Event Listeners (with checks)
             addColumnBtn.addEventListener('click', openColumnModal);
-            cancelCardBtn.addEventListener('click', closeCardModal);
-            saveCardBtn.addEventListener('click', () => { if (currentColumnToAddCard) { addCardToColumn(currentColumnToAddCard, cardText.value); } closeCardModal(); });
-            cancelColumnBtn.addEventListener('click', closeColumnModal);
-            saveColumnBtn.addEventListener('click', () => { addColumn(columnNameInput.value); closeColumnModal(); });
-            exportBtn.addEventListener('click', openExportModal);
-            closeExportBtn.addEventListener('click', closeExportModal);
-            copyExportBtn.addEventListener('click', () => {
+            if(cancelCardBtn) cancelCardBtn.addEventListener('click', closeCardModal);
+            if(saveCardBtn) saveCardBtn.addEventListener('click', () => { if (currentColumnToAddCard) { addCardToColumn(currentColumnToAddCard, cardText.value); } closeCardModal(); });
+            if(cancelColumnBtn) cancelColumnBtn.addEventListener('click', closeColumnModal);
+            if(saveColumnBtn) saveColumnBtn.addEventListener('click', () => { addColumn(columnNameInput.value); closeColumnModal(); });
+            if(exportBtn) exportBtn.addEventListener('click', openExportModal);
+            if(closeExportBtn) closeExportBtn.addEventListener('click', closeExportModal);
+            if(copyExportBtn && copyButtonText) copyExportBtn.addEventListener('click', () => {
                 navigator.clipboard.writeText(exportData.value)
                     .then(() => {
                         copyButtonText.textContent = 'Copied!';
@@ -471,20 +398,35 @@
                     })
                     .catch(err => console.error('Failed to copy text: ', err));
             });
-            importBtn.addEventListener('click', openImportModal);
-            cancelImportBtn.addEventListener('click', closeImportModal);
-            confirmImportBtn.addEventListener('click', handleImport);
-            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!cardModal.classList.contains('hidden')) closeCardModal(); if (!columnModal.classList.contains('hidden')) closeColumnModal(); if (!exportModal.classList.contains('hidden')) closeExportModal(); if (!importModal.classList.contains('hidden')) closeImportModal(); } });
-            [cardModal, columnModal, exportModal, importModal].forEach(modal => { modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(modal); }); });
+            if(importBtn) importBtn.addEventListener('click', openImportModal);
+            if(cancelImportBtn) cancelImportBtn.addEventListener('click', closeImportModal);
+            if(confirmImportBtn) confirmImportBtn.addEventListener('click', handleImport);
+
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (cardModal && !cardModal.classList.contains('hidden')) closeCardModal(); if (columnModal && !columnModal.classList.contains('hidden')) closeColumnModal(); if (exportModal && !exportModal.classList.contains('hidden')) closeExportModal(); if (importModal && !importModal.classList.contains('hidden')) closeImportModal(); } });
+            [cardModal, columnModal, exportModal, importModal].forEach(modal => { if(modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(modal); }); });
+
             board.addEventListener('dragover', handleBoardDragOver);
             board.addEventListener('drop', handleBoardDrop);
-            board.addEventListener('dragleave', (e) => { if (!board.contains(e.relatedTarget)) removeColumnPlaceholder(); });
+            board.addEventListener('dragleave', (e) => { if (board && !board.contains(e.relatedTarget)) removeColumnPlaceholder(); });
 
-            console.log("Board initialized."); // Add log to confirm initialization runs
+            console.log("Board initialized successfully.");
         }
 
+
+        // --- Full Function Definitions (Copied for completeness, no logic changes unless noted) ---
+        // (Ensuring these are present and unchanged from the previous working state)
+        function editColumnTitle(titleSpan) { if (!titleSpan || draggedColumn) return; const columnHeader = titleSpan.closest('.column-header'); if (!columnHeader) return; columnHeader.setAttribute('draggable', 'false'); const currentTitle = titleSpan.textContent; const input = document.createElement('input'); input.type = 'text'; input.value = currentTitle; input.className = 'editing-column-input'; titleSpan.replaceWith(input); input.focus(); input.select(); const handleKeyDown = (e) => { if (e.key === 'Enter') saveTitle(); else if (e.key === 'Escape') cancelEdit(); }; const saveTitle = () => { cleanupListeners(); const newTitle = input.value.trim(); const newTitleSpan = document.createElement('span'); newTitleSpan.className = 'column-title'; newTitleSpan.textContent = newTitle || currentTitle; newTitleSpan.addEventListener('dblclick', () => editColumnTitle(newTitleSpan)); input.replaceWith(newTitleSpan); columnHeader.setAttribute('draggable', 'true'); if (newTitle && newTitle !== currentTitle) saveBoardState(); }; const cancelEdit = () => { cleanupListeners(); const originalTitleSpan = document.createElement('span'); originalTitleSpan.className = 'column-title'; originalTitleSpan.textContent = currentTitle; originalTitleSpan.addEventListener('dblclick', () => editColumnTitle(originalTitleSpan)); input.replaceWith(originalTitleSpan); columnHeader.setAttribute('draggable', 'true'); }; const cleanupListeners = () => { input.removeEventListener('blur', saveTitle); input.removeEventListener('keydown', handleKeyDown); }; input.addEventListener('blur', saveTitle); input.addEventListener('keydown', handleKeyDown); }
+        function editCardText(cardTextP) { if (!cardTextP) return; const cardElement = cardTextP.closest('.kanban-card'); if (!cardElement || cardElement.classList.contains('dragging')) return; cardElement.setAttribute('draggable', 'false'); const currentText = cardTextP.textContent; const textarea = document.createElement('textarea'); textarea.value = currentText; textarea.className = 'editing-card-textarea'; textarea.rows = 3; cardTextP.replaceWith(textarea); textarea.focus(); textarea.select(); const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveCardEdit(); } else if (e.key === 'Escape') cancelCardEdit(); }; const saveCardEdit = () => { cleanupListeners(); const newText = textarea.value; const newCardTextP = document.createElement('p'); newCardTextP.className = 'card-text text-sm mb-3 break-words'; newCardTextP.textContent = newText; newCardTextP.addEventListener('dblclick', () => editCardText(newCardTextP)); textarea.replaceWith(newCardTextP); cardElement.setAttribute('draggable', 'true'); if (newText !== currentText) saveBoardState(); }; const cancelCardEdit = () => { cleanupListeners(); const originalCardTextP = document.createElement('p'); originalCardTextP.className = 'card-text text-sm mb-3 break-words'; originalCardTextP.textContent = currentText; originalCardTextP.addEventListener('dblclick', () => editCardText(originalCardTextP)); textarea.replaceWith(originalCardTextP); cardElement.setAttribute('draggable', 'true'); }; const cleanupListeners = () => { textarea.removeEventListener('blur', saveCardEdit); textarea.removeEventListener('keydown', handleKeyDown); }; textarea.addEventListener('blur', saveCardEdit); textarea.addEventListener('keydown', handleKeyDown); }
+
         // --- Run Initialization ---
-        document.addEventListener('DOMContentLoaded', initializeBoard);
+        // Wait for the DOM to be fully loaded before running the initialization script
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeBoard);
+        } else {
+            // DOMContentLoaded has already fired
+            initializeBoard();
+        }
+        console.log("Script loaded."); // Log to confirm script parsing
 
     </script>
 </body>
