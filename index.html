@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board with Save/Export/Import</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* Removed Lucide font loading and .lucide base styles */
+
+      /* --- Drag Feedback Styles --- */
+      .kanban-card.dragging { opacity: 0.5; border: 2px dashed #cbd5e1; transform: scale(1.05); }
+      .kanban-column.column-dragging { opacity: 0.7; border: 2px dashed #64748b; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); transform: rotate(1deg); }
+      .cards-container.drag-over { background-color: #e2e8f0; border: 2px dashed #94a3b8; border-radius: 0.375rem; }
+      .column-drop-placeholder { background-color: #cbd5e1; border: 2px dashed #94a3b8; border-radius: 0.5rem; height: 100px; width: 288px; flex-shrink: 0; margin: 0 0.5rem; }
+
+      /* --- General & Modal Styles --- */
+      .column-header { cursor: grab; }
+      .column-header:active { cursor: grabbing; }
+      .modal { transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out; }
+      .modal.hidden { opacity: 0; visibility: hidden; }
+      .modal.flex { opacity: 1; visibility: visible; }
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+      ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+      ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+      /* Ensure SVGs align nicely within flex containers like buttons */
+      button svg {
+        /* vertical-align: middle; */ /* Usually not needed in flex */
+        flex-shrink: 0; /* Prevent icons from shrinking */
+      }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-slate-100 font-[Inter] text-slate-800 h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-white shadow-md p-4 flex justify-between items-center flex-shrink-0 gap-2">
+        <h1 class="text-2xl font-bold text-slate-700 mr-auto">Kanban Board</h1>
+        <div class="flex items-center gap-2">
+             <button id="importBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out flex items-center gap-2 text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4"/></svg>
+                Import
+            </button>
+             <button id="exportBtn" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out flex items-center gap-2 text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                Export
+            </button>
+            <button id="addColumnBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out flex items-center gap-2 text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                Add Column
+            </button>
+        </div>
+    </header>
+
+    <main id="board" class="flex-grow flex gap-4 p-4 overflow-x-auto overflow-y-hidden">
+        </main>
+
+    <div id="cardModal" class="modal fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-6 shadow-xl w-full max-w-md">
+            <h3 class="text-xl font-semibold mb-4">Add New Card</h3>
+            <textarea id="cardText" class="w-full border border-slate-300 rounded-md p-2 mb-4 h-24 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none" placeholder="Enter card details..."></textarea>
+            <div class="flex justify-end gap-3">
+                <button id="cancelCardBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out">Cancel</button>
+                <button id="saveCardBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out">Add Card</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="columnModal" class="modal fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-6 shadow-xl w-full max-w-sm">
+            <h3 class="text-xl font-semibold mb-4">Add New Column</h3>
+            <input type="text" id="columnName" class="w-full border border-slate-300 rounded-md p-2 mb-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" placeholder="Enter column name...">
+            <div class="flex justify-end gap-3">
+                <button id="cancelColumnBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out">Cancel</button>
+                <button id="saveColumnBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out">Add Column</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="exportModal" class="modal fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-6 shadow-xl w-full max-w-lg">
+            <h3 class="text-xl font-semibold mb-4">Export Board Data (JSON)</h3>
+            <p class="text-sm text-slate-600 mb-2">Copy the JSON data below to save your board state manually.</p>
+            <textarea id="exportData" readonly class="w-full border border-slate-300 rounded-md p-2 mb-4 h-60 text-xs font-mono bg-slate-50 resize-none outline-none"></textarea>
+            <div class="flex justify-end gap-3">
+                 <button id="copyExportBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out flex items-center gap-2">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                     <span id="copyButtonText">Copy to Clipboard</span></button>
+                <button id="closeExportBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="importModal" class="modal fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-6 shadow-xl w-full max-w-lg">
+            <h3 class="text-xl font-semibold mb-4">Import Board Data (JSON)</h3>
+            <p class="text-sm text-slate-600 mb-2">Paste your previously exported JSON data below. <strong class="text-red-600">Warning: This will overwrite the current board.</strong></p>
+            <textarea id="importData" class="w-full border border-slate-300 rounded-md p-2 mb-4 h-60 text-xs font-mono focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none" placeholder="Paste JSON data here..."></textarea>
+            <div id="importError" class="text-red-600 text-sm mb-3 hidden">Invalid JSON data. Please check the format.</div>
+            <div class="flex justify-end gap-3">
+                <button id="cancelImportBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out">Cancel</button>
+                <button id="confirmImportBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150 ease-in-out">Import Data</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Constants ---
+        const WORK_MINUTES = 25;
+        const BREAK_MINUTES = 5;
+        const LOCAL_STORAGE_KEY = 'kanbanBoardState';
+
+        // --- DOM Elements ---
+        const board = document.getElementById('board');
+        const addColumnBtn = document.getElementById('addColumnBtn');
+        const cardModal = document.getElementById('cardModal');
+        const cancelCardBtn = document.getElementById('cancelCardBtn');
+        const saveCardBtn = document.getElementById('saveCardBtn');
+        const cardText = document.getElementById('cardText');
+        const columnModal = document.getElementById('columnModal');
+        const cancelColumnBtn = document.getElementById('cancelColumnBtn');
+        const saveColumnBtn = document.getElementById('saveColumnBtn');
+        const columnNameInput = document.getElementById('columnName');
+        const exportBtn = document.getElementById('exportBtn');
+        const exportModal = document.getElementById('exportModal');
+        const exportData = document.getElementById('exportData');
+        const copyExportBtn = document.getElementById('copyExportBtn');
+        const copyButtonText = document.getElementById('copyButtonText');
+        const closeExportBtn = document.getElementById('closeExportBtn');
+        const importBtn = document.getElementById('importBtn');
+        const importModal = document.getElementById('importModal');
+        const importData = document.getElementById('importData');
+        const importError = document.getElementById('importError');
+        const cancelImportBtn = document.getElementById('cancelImportBtn');
+        const confirmImportBtn = document.getElementById('confirmImportBtn');
+
+        // --- State ---
+        let draggedCard = null;
+        let draggedColumn = null;
+        let currentColumnToAddCard = null;
+
+        // --- Core Functions ---
+
+        /** Generates a unique ID. */
+        function generateId() {
+            return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+
+        /** Creates a new Kanban card element (attaches listeners). */
+        function createCardElement(cardData) {
+            const card = document.createElement('div');
+            card.className = 'kanban-card bg-white rounded-md p-3 shadow cursor-grab active:cursor-grabbing border border-transparent';
+            card.setAttribute('draggable', 'true');
+            card.id = cardData.id;
+            card.dataset.timerInterval = '';
+            card.dataset.timerState = cardData.timerState || 'stopped';
+            card.dataset.remainingTime = cardData.remainingTime !== undefined ? cardData.remainingTime : (WORK_MINUTES * 60);
+            card.dataset.isWorkPhase = cardData.isWorkPhase !== undefined ? String(cardData.isWorkPhase) : 'true';
+
+            // Insert SVGs directly into the template literal
+            card.innerHTML = `
+                <p class="card-text text-sm mb-3 break-words">${cardData.text || ''}</p>
+                <div class="timer-display text-center font-mono text-xl font-semibold text-slate-700 mb-2">
+                    ${formatTime(parseInt(card.dataset.remainingTime))}
+                </div>
+                <div class="timer-controls flex justify-center gap-2 text-xs">
+                    <button class="start-timer-btn bg-green-100 hover:bg-green-200 text-green-700 p-1 rounded" title="Start Timer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
+                    <button class="pause-timer-btn bg-yellow-100 hover:bg-yellow-200 text-yellow-700 p-1 rounded hidden" title="Pause Timer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg></button>
+                    <button class="reset-timer-btn bg-red-100 hover:bg-red-200 text-red-700 p-1 rounded" title="Reset Timer"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
+                    <button class="delete-card-btn bg-slate-100 hover:bg-slate-200 text-slate-500 p-1 rounded ml-auto" title="Delete Card"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-3.5 h-3.5"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></button>
+                </div>
+                <div class="timer-status text-xs text-center text-slate-500 mt-1 h-4"></div>
+            `;
+
+            // Add event listeners
+            card.addEventListener('dragstart', handleCardDragStart);
+            card.addEventListener('dragend', handleCardDragEnd);
+            const startBtn = card.querySelector('.start-timer-btn');
+            const pauseBtn = card.querySelector('.pause-timer-btn');
+            const resetBtn = card.querySelector('.reset-timer-btn');
+            const deleteBtn = card.querySelector('.delete-card-btn');
+            startBtn.addEventListener('click', () => startTimer(card));
+            pauseBtn.addEventListener('click', () => pauseTimer(card));
+            resetBtn.addEventListener('click', () => resetTimer(card));
+            deleteBtn.addEventListener('click', () => deleteCard(card));
+
+            updateTimerDisplay(card);
+            return card;
+        }
+
+        /** Creates a new Kanban column element (attaches listeners). */
+        function createColumnElement(columnData) {
+            const column = document.createElement('div');
+            column.className = 'kanban-column bg-slate-200 rounded-lg p-3 shadow-md w-72 flex-shrink-0 flex flex-col h-full max-h-full';
+            column.dataset.columnId = columnData.id;
+             // Insert SVGs directly into the template literal
+            column.innerHTML = `
+                <h2 class="column-header text-lg font-semibold mb-3 text-slate-700 px-1 flex justify-between items-center" draggable="true">
+                    <span class="column-title">${columnData.title || 'Untitled'}</span>
+                     <button class="delete-column-btn text-slate-400 hover:text-red-500 text-xs p-1" title="Delete Column"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-3.5 h-3.5"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></button>
+                </h2>
+                <div class="cards-container flex-grow overflow-y-auto space-y-3 pr-1 pb-2 min-h-[50px]"></div>
+                <button class="add-card-btn mt-3 w-full bg-white hover:bg-slate-50 text-slate-600 font-medium py-2 px-3 rounded-md shadow-sm text-sm flex items-center justify-center gap-1 transition duration-150 ease-in-out">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block w-4 h-4"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Add Card
+                </button>
+            `;
+
+            // Add event listeners
+            const cardsContainer = column.querySelector('.cards-container');
+            const addCardBtn = column.querySelector('.add-card-btn');
+            const deleteColumnBtn = column.querySelector('.delete-column-btn');
+            const columnHeader = column.querySelector('.column-header');
+            const titleSpan = column.querySelector('.column-title');
+            cardsContainer.addEventListener('dragover', handleCardDragOver);
+            cardsContainer.addEventListener('dragleave', handleCardDragLeave);
+            cardsContainer.addEventListener('drop', handleCardDrop);
+            columnHeader.addEventListener('dragstart', handleColumnDragStart);
+            columnHeader.addEventListener('dragend', handleColumnDragEnd);
+            deleteColumnBtn.addEventListener('mousedown', e => e.stopPropagation());
+            addCardBtn.addEventListener('click', () => openCardModal(column));
+            deleteColumnBtn.addEventListener('click', () => deleteColumn(column));
+            titleSpan.addEventListener('dblclick', () => editColumnTitle(titleSpan));
+
+            // Add cards from columnData
+            if (columnData.cards && Array.isArray(columnData.cards)) {
+                columnData.cards.forEach(cardData => {
+                    const newCard = createCardElement(cardData);
+                    cardsContainer.appendChild(newCard);
+                });
+            }
+            return column;
+        }
+
+        // --- Modal Control Functions ---
+        function openModal(modalElement) { modalElement.classList.remove('hidden'); modalElement.classList.add('flex'); }
+        function closeModal(modalElement) { modalElement.classList.add('hidden'); modalElement.classList.remove('flex'); }
+        function openCardModal(columnElement) { currentColumnToAddCard = columnElement; cardText.value = ''; openModal(cardModal); cardText.focus(); }
+        function closeCardModal() { closeModal(cardModal); currentColumnToAddCard = null; }
+        function openColumnModal() { columnNameInput.value = ''; openModal(columnModal); columnNameInput.focus(); }
+        function closeColumnModal() { closeModal(columnModal); }
+        function openExportModal() { exportData.value = getBoardStateAsJson(); openModal(exportModal); exportData.select(); }
+        function closeExportModal() { closeModal(exportModal); }
+        function openImportModal() { importData.value = ''; importError.classList.add('hidden'); openModal(importModal); importData.focus(); }
+        function closeImportModal() { closeModal(importModal); }
+
+         // --- Add/Delete/Edit Functions (Include saveBoardState calls) ---
+        function addCardToColumn(columnElement, text) { if (!text || !text.trim()) return; const cardsContainer = columnElement.querySelector('.cards-container'); const cardId = generateId(); const cardData = { id: cardId, text: text.trim(), timerState: 'stopped', remainingTime: WORK_MINUTES * 60, isWorkPhase: true }; const newCard = createCardElement(cardData); cardsContainer.appendChild(newCard); saveBoardState(); }
+        function addColumn(name) { if (!name || !name.trim()) return; const columnId = generateId(); const columnData = { id: columnId, title: name.trim(), cards: [] }; const newColumn = createColumnElement(columnData); board.appendChild(newColumn); saveBoardState(); }
+        function deleteCard(cardElement) { clearInterval(parseInt(cardElement.dataset.timerInterval)); cardElement.remove(); saveBoardState(); }
+        function deleteColumn(columnElement) { const columnName = columnElement.querySelector('.column-title').textContent; if (confirm(`Are you sure you want to delete the "${columnName}" column and all its cards?`)) { columnElement.querySelectorAll('.kanban-card').forEach(card => { clearInterval(parseInt(card.dataset.timerInterval)); }); columnElement.remove(); saveBoardState(); } }
+        function editColumnTitle(titleSpan) {
+            if (draggedColumn) return;
+            const columnHeader = titleSpan.closest('.column-header');
+            columnHeader.setAttribute('draggable', 'false');
+            const currentTitle = titleSpan.textContent;
+            const input = document.createElement('input');
+            input.type = 'text'; input.value = currentTitle;
+            input.className = 'text-lg font-semibold text-slate-700 bg-white border border-blue-300 rounded px-1 w-full outline-none';
+            titleSpan.replaceWith(input); input.focus(); input.select();
+            const saveTitle = () => {
+                const newTitle = input.value.trim();
+                titleSpan.textContent = newTitle || currentTitle;
+                input.replaceWith(titleSpan);
+                columnHeader.setAttribute('draggable', 'true');
+                input.removeEventListener('blur', saveTitle); input.removeEventListener('keydown', handleKeyDown);
+                if (newTitle && newTitle !== currentTitle) {
+                    saveBoardState(); // Save state after successful title edit
+                }
+            };
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') saveTitle();
+                else if (e.key === 'Escape') {
+                    titleSpan.textContent = currentTitle; input.replaceWith(titleSpan);
+                    columnHeader.setAttribute('draggable', 'true');
+                    input.removeEventListener('blur', saveTitle); input.removeEventListener('keydown', handleKeyDown);
+                }
+            };
+            input.addEventListener('blur', saveTitle); input.addEventListener('keydown', handleKeyDown);
+        }
+
+        // --- Save/Load/Export/Import ---
+        function getBoardStateObject() {
+            const state = { columns: [] };
+            document.querySelectorAll('.kanban-column').forEach(columnEl => {
+                const columnData = { id: columnEl.dataset.columnId, title: columnEl.querySelector('.column-title').textContent, cards: [] };
+                columnEl.querySelectorAll('.kanban-card').forEach(cardEl => {
+                    columnData.cards.push({ id: cardEl.id, text: cardEl.querySelector('.card-text').textContent, timerState: cardEl.dataset.timerState, remainingTime: parseInt(cardEl.dataset.remainingTime), isWorkPhase: cardEl.dataset.isWorkPhase === 'true' });
+                });
+                state.columns.push(columnData);
+            });
+            return state;
+        }
+        function saveBoardState() { try { const state = getBoardStateObject(); localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state)); } catch (error) { console.error("Error saving board state:", error); } }
+        function loadBoardState() { try { const savedState = localStorage.getItem(LOCAL_STORAGE_KEY); if (savedState) { const parsedState = JSON.parse(savedState); if (parsedState && parsedState.columns) { renderBoardFromJson(parsedState); return true; } } } catch (error) { console.error("Error loading board state:", error); localStorage.removeItem(LOCAL_STORAGE_KEY); } return false; }
+        function renderBoardFromJson(stateObject) { board.innerHTML = ''; if (stateObject && stateObject.columns && Array.isArray(stateObject.columns)) { stateObject.columns.forEach(columnData => { if (columnData && columnData.id && columnData.title) { const newColumn = createColumnElement(columnData); board.appendChild(newColumn); } else { console.warn("Skipping invalid column data during render:", columnData); } }); } else { console.error("Invalid data structure passed to renderBoardFromJson:", stateObject); } }
+        function getBoardStateAsJson() { try { const state = getBoardStateObject(); return JSON.stringify(state, null, 2); } catch (error) { console.error("Error generating JSON:", error); return '{"error": "Could not generate JSON data."}'; } }
+        function handleImport() { const jsonString = importData.value; importError.classList.add('hidden'); if (!jsonString.trim()) { importError.textContent = "Import field is empty."; importError.classList.remove('hidden'); return; } try { const parsedData = JSON.parse(jsonString); if (parsedData && Array.isArray(parsedData.columns)) { if (confirm("Importing will replace the current board. Are you sure?")) { renderBoardFromJson(parsedData); saveBoardState(); closeImportModal(); } } else { throw new Error("Invalid data structure: 'columns' array not found."); } } catch (error) { console.error("Import error:", error); importError.textContent = `Invalid JSON data: ${error.message}. Please check the format.`; importError.classList.remove('hidden'); } }
+
+        // --- Drag and Drop Handlers ---
+        function handleCardDragStart(e) { if (e.target.classList.contains('kanban-card')) { draggedCard = e.target; setTimeout(() => { if(draggedCard) draggedCard.classList.add('dragging'); }, 0); e.dataTransfer.setData('text/plain', e.target.id); e.dataTransfer.effectAllowed = 'move'; draggedColumn = null; } else { e.preventDefault(); } }
+        function handleCardDragEnd(e) { if (draggedCard) draggedCard.classList.remove('dragging'); document.querySelectorAll('.cards-container.drag-over').forEach(el => el.classList.remove('drag-over')); draggedCard = null; }
+        function handleCardDragOver(e) { if (!draggedCard) return; e.preventDefault(); const targetContainer = e.target.closest('.cards-container'); if (targetContainer) { e.dataTransfer.dropEffect = 'move'; targetContainer.classList.add('drag-over'); e.stopPropagation(); } else { e.dataTransfer.dropEffect = 'none'; } }
+        function handleCardDragLeave(e) { if (!draggedCard) return; const targetContainer = e.target.closest('.cards-container'); if (targetContainer && (e.target === targetContainer || !targetContainer.contains(e.relatedTarget))) { targetContainer.classList.remove('drag-over'); } }
+        function handleCardDrop(e) { if (!draggedCard) return; e.preventDefault(); const targetContainer = e.target.closest('.cards-container'); if (targetContainer) { e.stopPropagation(); targetContainer.classList.remove('drag-over'); const dropTargetCard = e.target.closest('.kanban-card'); if (dropTargetCard && dropTargetCard !== draggedCard) { targetContainer.insertBefore(draggedCard, dropTargetCard); } else if (!targetContainer.contains(draggedCard)) { targetContainer.appendChild(draggedCard); } saveBoardState(); } }
+        function handleColumnDragStart(e) { if (e.target.classList.contains('column-header')) { draggedColumn = e.target.closest('.kanban-column'); draggedCard = null; setTimeout(() => { if(draggedColumn) draggedColumn.classList.add('column-dragging'); }, 0); e.dataTransfer.setData('text/plain', draggedColumn.dataset.columnId); e.dataTransfer.effectAllowed = 'move'; } else { e.preventDefault(); } }
+        function handleColumnDragEnd(e) { if (draggedColumn) draggedColumn.classList.remove('column-dragging'); removeColumnPlaceholder(); draggedColumn = null; }
+        function getDragAfterElement(container, x) { const draggableElements = [...container.querySelectorAll('.kanban-column:not(.column-dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = x - box.left - box.width / 2; if (offset < 0 && offset > closest.offset) return { offset: offset, element: child }; else return closest; }, { offset: Number.NEGATIVE_INFINITY }).element; }
+        function handleBoardDragOver(e) { if (!draggedColumn) { if (draggedCard) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; } return; } e.preventDefault(); e.dataTransfer.dropEffect = 'move'; const afterElement = getDragAfterElement(board, e.clientX); removeColumnPlaceholder(); insertColumnPlaceholder(afterElement); }
+        function handleBoardDrop(e) { if (!draggedColumn) return; e.preventDefault(); const afterElement = getDragAfterElement(board, e.clientX); if (afterElement == null) { board.appendChild(draggedColumn); } else { board.insertBefore(draggedColumn, afterElement); } removeColumnPlaceholder(); saveBoardState(); }
+        let columnPlaceholder = null;
+        function insertColumnPlaceholder(beforeElement) { if (!columnPlaceholder) { columnPlaceholder = document.createElement('div'); columnPlaceholder.className = 'column-drop-placeholder'; } if (beforeElement == null) board.appendChild(columnPlaceholder); else board.insertBefore(columnPlaceholder, beforeElement); }
+        function removeColumnPlaceholder() { if (columnPlaceholder && columnPlaceholder.parentNode) { columnPlaceholder.parentNode.removeChild(columnPlaceholder); } columnPlaceholder = null; }
+
+        // --- Pomodoro Timer Functions ---
+        function formatTime(seconds) { const mins = Math.floor(seconds / 60); const secs = seconds % 60; return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`; }
+        function updateTimerDisplay(card) { const timerDisplay = card.querySelector('.timer-display'); const timerStatus = card.querySelector('.timer-status'); const remainingTime = parseInt(card.dataset.remainingTime); const state = card.dataset.timerState; const isWorkPhase = card.dataset.isWorkPhase === 'true'; timerDisplay.textContent = formatTime(remainingTime); let statusText = ''; if (state === 'running') statusText = isWorkPhase ? 'Work session...' : 'Break time!'; else if (state === 'paused') statusText = 'Timer paused'; else if (state === 'break') statusText = 'Break time!'; else statusText = isWorkPhase ? 'Ready to work' : 'Ready for break'; timerStatus.textContent = statusText; const startBtn = card.querySelector('.start-timer-btn'); const pauseBtn = card.querySelector('.pause-timer-btn'); startBtn.classList.toggle('hidden', state === 'running'); pauseBtn.classList.toggle('hidden', state !== 'running'); }
+        function startTimer(card) { let state = card.dataset.timerState; if (state === 'running') return; card.dataset.timerState = 'running'; updateTimerDisplay(card); clearInterval(parseInt(card.dataset.timerInterval)); const intervalId = setInterval(() => { let remainingTime = parseInt(card.dataset.remainingTime); remainingTime--; card.dataset.remainingTime = remainingTime; if (remainingTime <= 0) { clearInterval(intervalId); card.dataset.timerInterval = ''; handleTimerEnd(card); } else updateTimerDisplay(card); }, 1000); card.dataset.timerInterval = intervalId; }
+        function pauseTimer(card) { const state = card.dataset.timerState; if (state !== 'running') return; clearInterval(parseInt(card.dataset.timerInterval)); card.dataset.timerInterval = ''; card.dataset.timerState = 'paused'; updateTimerDisplay(card); }
+        function resetTimer(card) { clearInterval(parseInt(card.dataset.timerInterval)); card.dataset.timerInterval = ''; card.dataset.timerState = 'stopped'; card.dataset.isWorkPhase = 'true'; card.dataset.remainingTime = WORK_MINUTES * 60; updateTimerDisplay(card); }
+        function handleTimerEnd(card) { const isWorkPhase = card.dataset.isWorkPhase === 'true'; alert(isWorkPhase ? 'Work session complete! Time for a break.' : 'Break over! Time to get back to work.'); if (isWorkPhase) { card.dataset.isWorkPhase = 'false'; card.dataset.remainingTime = BREAK_MINUTES * 60; card.dataset.timerState = 'break'; } else { card.dataset.isWorkPhase = 'true'; card.dataset.remainingTime = WORK_MINUTES * 60; card.dataset.timerState = 'stopped'; } updateTimerDisplay(card); }
+
+        // --- Initial Setup ---
+        function initializeBoard() {
+            const loaded = loadBoardState();
+            if (!loaded) {
+                console.log("No saved state found, creating default columns.");
+                addColumn('To Do');
+                addColumn('In Progress');
+            }
+            // Add Global Event Listeners
+            addColumnBtn.addEventListener('click', openColumnModal);
+            cancelCardBtn.addEventListener('click', closeCardModal);
+            saveCardBtn.addEventListener('click', () => { if (currentColumnToAddCard) { addCardToColumn(currentColumnToAddCard, cardText.value); } closeCardModal(); });
+            cancelColumnBtn.addEventListener('click', closeColumnModal);
+            saveColumnBtn.addEventListener('click', () => { addColumn(columnNameInput.value); closeColumnModal(); });
+            exportBtn.addEventListener('click', openExportModal);
+            closeExportBtn.addEventListener('click', closeExportModal);
+            copyExportBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(exportData.value)
+                    .then(() => {
+                        copyButtonText.textContent = 'Copied!';
+                        setTimeout(() => { copyButtonText.textContent = 'Copy to Clipboard'; }, 1500);
+                    })
+                    .catch(err => console.error('Failed to copy text: ', err));
+            });
+            importBtn.addEventListener('click', openImportModal);
+            cancelImportBtn.addEventListener('click', closeImportModal);
+            confirmImportBtn.addEventListener('click', handleImport);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!cardModal.classList.contains('hidden')) closeCardModal(); if (!columnModal.classList.contains('hidden')) closeColumnModal(); if (!exportModal.classList.contains('hidden')) closeExportModal(); if (!importModal.classList.contains('hidden')) closeImportModal(); } });
+            [cardModal, columnModal, exportModal, importModal].forEach(modal => { modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(modal); }); });
+            board.addEventListener('dragover', handleBoardDragOver);
+            board.addEventListener('drop', handleBoardDrop);
+            board.addEventListener('dragleave', (e) => { if (!board.contains(e.relatedTarget)) removeColumnPlaceholder(); });
+        }
+
+        // --- Run Initialization ---
+        document.addEventListener('DOMContentLoaded', initializeBoard);
+
+    </script>
+</body>
+</html>
+
