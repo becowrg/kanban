@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kanban Board with Save/Export/Import</title>
+    <title>Kanban Board</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      /* Removed Lucide font loading and .lucide base styles */
-
       /* --- Drag Feedback Styles --- */
       .kanban-card.dragging { opacity: 0.5; border: 2px dashed #cbd5e1; transform: scale(1.05); }
       .kanban-column.column-dragging { opacity: 0.7; border: 2px dashed #64748b; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); transform: rotate(1deg); }
@@ -25,11 +23,34 @@
       ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
       ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
       ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+      button svg { flex-shrink: 0; }
 
-      /* Ensure SVGs align nicely within flex containers like buttons */
-      button svg {
-        /* vertical-align: middle; */ /* Usually not needed in flex */
-        flex-shrink: 0; /* Prevent icons from shrinking */
+      /* Style for textarea during card edit */
+      .editing-card-textarea {
+          width: 100%;
+          font-size: 0.875rem; /* text-sm */
+          line-height: 1.25rem;
+          padding: 0.25rem;
+          border: 1px solid #60a5fa; /* blue-400 */
+          border-radius: 0.25rem; /* rounded-sm */
+          resize: none;
+          outline: none;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); /* focus ring imitation */
+          min-height: 60px; /* Ensure decent height */
+      }
+       /* Style for input during column title edit */
+      .editing-column-input {
+          font-size: 1.125rem; /* text-lg */
+          font-weight: 600; /* font-semibold */
+          color: #334155; /* text-slate-700 */
+          background-color: #ffffff; /* bg-white */
+          border: 1px solid #60a5fa; /* border-blue-400 */
+          border-radius: 0.25rem; /* rounded */
+          padding-left: 0.25rem; /* px-1 */
+          padding-right: 0.25rem; /* px-1 */
+          width: 100%;
+          outline: none;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); /* focus ring imitation */
       }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -162,7 +183,6 @@
             card.dataset.remainingTime = cardData.remainingTime !== undefined ? cardData.remainingTime : (WORK_MINUTES * 60);
             card.dataset.isWorkPhase = cardData.isWorkPhase !== undefined ? String(cardData.isWorkPhase) : 'true';
 
-            // Insert SVGs directly into the template literal
             card.innerHTML = `
                 <p class="card-text text-sm mb-3 break-words">${cardData.text || ''}</p>
                 <div class="timer-display text-center font-mono text-xl font-semibold text-slate-700 mb-2">
@@ -184,10 +204,16 @@
             const pauseBtn = card.querySelector('.pause-timer-btn');
             const resetBtn = card.querySelector('.reset-timer-btn');
             const deleteBtn = card.querySelector('.delete-card-btn');
+            const cardTextP = card.querySelector('.card-text'); // Get the paragraph element
+
             startBtn.addEventListener('click', () => startTimer(card));
             pauseBtn.addEventListener('click', () => pauseTimer(card));
             resetBtn.addEventListener('click', () => resetTimer(card));
             deleteBtn.addEventListener('click', () => deleteCard(card));
+            // Add listener for editing card text
+            if (cardTextP) { // Ensure paragraph exists before adding listener
+                cardTextP.addEventListener('dblclick', () => editCardText(cardTextP));
+            }
 
             updateTimerDisplay(card);
             return card;
@@ -198,7 +224,6 @@
             const column = document.createElement('div');
             column.className = 'kanban-column bg-slate-200 rounded-lg p-3 shadow-md w-72 flex-shrink-0 flex flex-col h-full max-h-full';
             column.dataset.columnId = columnData.id;
-             // Insert SVGs directly into the template literal
             column.innerHTML = `
                 <h2 class="column-header text-lg font-semibold mb-3 text-slate-700 px-1 flex justify-between items-center" draggable="true">
                     <span class="column-title">${columnData.title || 'Untitled'}</span>
@@ -224,7 +249,9 @@
             deleteColumnBtn.addEventListener('mousedown', e => e.stopPropagation());
             addCardBtn.addEventListener('click', () => openCardModal(column));
             deleteColumnBtn.addEventListener('click', () => deleteColumn(column));
-            titleSpan.addEventListener('dblclick', () => editColumnTitle(titleSpan));
+             if (titleSpan) { // Ensure title span exists before adding listener
+                titleSpan.addEventListener('dblclick', () => editColumnTitle(titleSpan));
+             }
 
             // Add cards from columnData
             if (columnData.cards && Array.isArray(columnData.cards)) {
@@ -248,66 +275,162 @@
         function openImportModal() { importData.value = ''; importError.classList.add('hidden'); openModal(importModal); importData.focus(); }
         function closeImportModal() { closeModal(importModal); }
 
-         // --- Add/Delete/Edit Functions (Include saveBoardState calls) ---
+         // --- Add/Delete/Edit Functions ---
         function addCardToColumn(columnElement, text) { if (!text || !text.trim()) return; const cardsContainer = columnElement.querySelector('.cards-container'); const cardId = generateId(); const cardData = { id: cardId, text: text.trim(), timerState: 'stopped', remainingTime: WORK_MINUTES * 60, isWorkPhase: true }; const newCard = createCardElement(cardData); cardsContainer.appendChild(newCard); saveBoardState(); }
         function addColumn(name) { if (!name || !name.trim()) return; const columnId = generateId(); const columnData = { id: columnId, title: name.trim(), cards: [] }; const newColumn = createColumnElement(columnData); board.appendChild(newColumn); saveBoardState(); }
         function deleteCard(cardElement) { clearInterval(parseInt(cardElement.dataset.timerInterval)); cardElement.remove(); saveBoardState(); }
         function deleteColumn(columnElement) { const columnName = columnElement.querySelector('.column-title').textContent; if (confirm(`Are you sure you want to delete the "${columnName}" column and all its cards?`)) { columnElement.querySelectorAll('.kanban-card').forEach(card => { clearInterval(parseInt(card.dataset.timerInterval)); }); columnElement.remove(); saveBoardState(); } }
+
+        /** Allows editing of a column title. */
         function editColumnTitle(titleSpan) {
-            if (draggedColumn) return;
+            if (!titleSpan || draggedColumn) return; // Prevent edit while dragging column or if span doesn't exist
             const columnHeader = titleSpan.closest('.column-header');
-            columnHeader.setAttribute('draggable', 'false');
+            if (!columnHeader) return; // Ensure header exists
+
+            columnHeader.setAttribute('draggable', 'false'); // Disable drag during edit
             const currentTitle = titleSpan.textContent;
             const input = document.createElement('input');
-            input.type = 'text'; input.value = currentTitle;
-            input.className = 'text-lg font-semibold text-slate-700 bg-white border border-blue-300 rounded px-1 w-full outline-none';
-            titleSpan.replaceWith(input); input.focus(); input.select();
-            const saveTitle = () => {
-                const newTitle = input.value.trim();
-                titleSpan.textContent = newTitle || currentTitle;
-                input.replaceWith(titleSpan);
-                columnHeader.setAttribute('draggable', 'true');
-                input.removeEventListener('blur', saveTitle); input.removeEventListener('keydown', handleKeyDown);
-                if (newTitle && newTitle !== currentTitle) {
-                    saveBoardState(); // Save state after successful title edit
-                }
-            };
+            input.type = 'text';
+            input.value = currentTitle;
+            input.className = 'editing-column-input'; // Use specific class for styling
+            titleSpan.replaceWith(input);
+            input.focus();
+            input.select();
+
+            // Define listener functions *before* adding them
             const handleKeyDown = (e) => {
-                if (e.key === 'Enter') saveTitle();
-                else if (e.key === 'Escape') {
-                    titleSpan.textContent = currentTitle; input.replaceWith(titleSpan);
-                    columnHeader.setAttribute('draggable', 'true');
-                    input.removeEventListener('blur', saveTitle); input.removeEventListener('keydown', handleKeyDown);
+                if (e.key === 'Enter') {
+                    saveTitle();
+                } else if (e.key === 'Escape') {
+                    cancelEdit();
                 }
             };
-            input.addEventListener('blur', saveTitle); input.addEventListener('keydown', handleKeyDown);
+
+            const saveTitle = () => {
+                cleanupListeners(); // Remove listeners first
+                const newTitle = input.value.trim();
+                // Create a new span to replace the input
+                const newTitleSpan = document.createElement('span');
+                newTitleSpan.className = 'column-title';
+                newTitleSpan.textContent = newTitle || currentTitle; // Use new title or revert if empty
+                newTitleSpan.addEventListener('dblclick', () => editColumnTitle(newTitleSpan)); // Re-attach listener
+
+                input.replaceWith(newTitleSpan); // Replace input with the new span
+                columnHeader.setAttribute('draggable', 'true'); // Re-enable drag
+
+                if (newTitle && newTitle !== currentTitle) {
+                    saveBoardState(); // Save state only if title actually changed
+                }
+            };
+
+             const cancelEdit = () => {
+                cleanupListeners(); // Remove listeners first
+                 // Revert: Create a new span with original title
+                const originalTitleSpan = document.createElement('span');
+                originalTitleSpan.className = 'column-title';
+                originalTitleSpan.textContent = currentTitle;
+                originalTitleSpan.addEventListener('dblclick', () => editColumnTitle(originalTitleSpan)); // Re-attach listener
+
+                input.replaceWith(originalTitleSpan);
+                columnHeader.setAttribute('draggable', 'true');
+            };
+
+            // Helper to remove listeners
+            const cleanupListeners = () => {
+                input.removeEventListener('blur', saveTitle);
+                input.removeEventListener('keydown', handleKeyDown);
+            };
+
+            // Add listeners
+            input.addEventListener('blur', saveTitle);
+            input.addEventListener('keydown', handleKeyDown);
         }
 
-        // --- Save/Load/Export/Import ---
-        function getBoardStateObject() {
-            const state = { columns: [] };
-            document.querySelectorAll('.kanban-column').forEach(columnEl => {
-                const columnData = { id: columnEl.dataset.columnId, title: columnEl.querySelector('.column-title').textContent, cards: [] };
-                columnEl.querySelectorAll('.kanban-card').forEach(cardEl => {
-                    columnData.cards.push({ id: cardEl.id, text: cardEl.querySelector('.card-text').textContent, timerState: cardEl.dataset.timerState, remainingTime: parseInt(cardEl.dataset.remainingTime), isWorkPhase: cardEl.dataset.isWorkPhase === 'true' });
-                });
-                state.columns.push(columnData);
-            });
-            return state;
+        /** Allows editing of card text content. */
+        function editCardText(cardTextP) {
+            if (!cardTextP) return; // Safety check
+            const cardElement = cardTextP.closest('.kanban-card');
+            if (!cardElement || cardElement.classList.contains('dragging')) return; // Don't edit if dragging
+
+            cardElement.setAttribute('draggable', 'false'); // Disable drag during edit
+            const currentText = cardTextP.textContent;
+
+            const textarea = document.createElement('textarea');
+            textarea.value = currentText;
+            textarea.className = 'editing-card-textarea'; // Apply specific styling
+            textarea.rows = 3;
+
+            cardTextP.replaceWith(textarea);
+            textarea.focus();
+            textarea.select();
+
+             // Define listener functions *before* adding them
+            const handleKeyDown = (e) => {
+                // Shift+Enter for newline, Enter alone to save
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault(); // Prevent default Enter behavior (newline)
+                    saveCardEdit();
+                } else if (e.key === 'Escape') {
+                    cancelCardEdit();
+                }
+            };
+
+            const saveCardEdit = () => {
+                cleanupListeners(); // Remove listeners first
+                const newText = textarea.value; // Keep leading/trailing spaces if user intended
+                 // Create a new paragraph element
+                const newCardTextP = document.createElement('p');
+                newCardTextP.className = 'card-text text-sm mb-3 break-words';
+                newCardTextP.textContent = newText; // Use the new text directly
+                newCardTextP.addEventListener('dblclick', () => editCardText(newCardTextP)); // Re-attach listener!
+
+                textarea.replaceWith(newCardTextP); // Replace textarea with new <p>
+                cardElement.setAttribute('draggable', 'true'); // Re-enable drag
+
+                if (newText !== currentText) { // Check if text actually changed
+                    saveBoardState(); // Save state only if text actually changed
+                }
+            };
+
+             const cancelCardEdit = () => {
+                cleanupListeners(); // Remove listeners first
+                 // Revert: Create a new paragraph with original text
+                const originalCardTextP = document.createElement('p');
+                originalCardTextP.className = 'card-text text-sm mb-3 break-words';
+                originalCardTextP.textContent = currentText;
+                originalCardTextP.addEventListener('dblclick', () => editCardText(originalCardTextP)); // Re-attach listener!
+
+                textarea.replaceWith(originalCardTextP);
+                cardElement.setAttribute('draggable', 'true');
+            };
+
+             // Helper to remove listeners
+            const cleanupListeners = () => {
+                textarea.removeEventListener('blur', saveCardEdit);
+                textarea.removeEventListener('keydown', handleKeyDown);
+            };
+
+            // Add listeners
+            textarea.addEventListener('blur', saveCardEdit);
+            textarea.addEventListener('keydown', handleKeyDown);
         }
+
+
+        // --- Save/Load/Export/Import ---
+        function getBoardStateObject() { const state = { columns: [] }; document.querySelectorAll('.kanban-column').forEach(columnEl => { const columnData = { id: columnEl.dataset.columnId, title: columnEl.querySelector('.column-title').textContent, cards: [] }; columnEl.querySelectorAll('.kanban-card').forEach(cardEl => { columnData.cards.push({ id: cardEl.id, text: cardEl.querySelector('.card-text').textContent, timerState: cardEl.dataset.timerState, remainingTime: parseInt(cardEl.dataset.remainingTime), isWorkPhase: cardEl.dataset.isWorkPhase === 'true' }); }); state.columns.push(columnData); }); return state; }
         function saveBoardState() { try { const state = getBoardStateObject(); localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state)); } catch (error) { console.error("Error saving board state:", error); } }
         function loadBoardState() { try { const savedState = localStorage.getItem(LOCAL_STORAGE_KEY); if (savedState) { const parsedState = JSON.parse(savedState); if (parsedState && parsedState.columns) { renderBoardFromJson(parsedState); return true; } } } catch (error) { console.error("Error loading board state:", error); localStorage.removeItem(LOCAL_STORAGE_KEY); } return false; }
-        function renderBoardFromJson(stateObject) { board.innerHTML = ''; if (stateObject && stateObject.columns && Array.isArray(stateObject.columns)) { stateObject.columns.forEach(columnData => { if (columnData && columnData.id && columnData.title) { const newColumn = createColumnElement(columnData); board.appendChild(newColumn); } else { console.warn("Skipping invalid column data during render:", columnData); } }); } else { console.error("Invalid data structure passed to renderBoardFromJson:", stateObject); } }
+        function renderBoardFromJson(stateObject) { board.innerHTML = ''; if (stateObject && stateObject.columns && Array.isArray(stateObject.columns)) { stateObject.columns.forEach(columnData => { if (columnData && columnData.id && columnData.title != null) { const newColumn = createColumnElement(columnData); board.appendChild(newColumn); } else { console.warn("Skipping invalid column data during render:", columnData); } }); } else { console.error("Invalid data structure passed to renderBoardFromJson:", stateObject); } }
         function getBoardStateAsJson() { try { const state = getBoardStateObject(); return JSON.stringify(state, null, 2); } catch (error) { console.error("Error generating JSON:", error); return '{"error": "Could not generate JSON data."}'; } }
         function handleImport() { const jsonString = importData.value; importError.classList.add('hidden'); if (!jsonString.trim()) { importError.textContent = "Import field is empty."; importError.classList.remove('hidden'); return; } try { const parsedData = JSON.parse(jsonString); if (parsedData && Array.isArray(parsedData.columns)) { if (confirm("Importing will replace the current board. Are you sure?")) { renderBoardFromJson(parsedData); saveBoardState(); closeImportModal(); } } else { throw new Error("Invalid data structure: 'columns' array not found."); } } catch (error) { console.error("Import error:", error); importError.textContent = `Invalid JSON data: ${error.message}. Please check the format.`; importError.classList.remove('hidden'); } }
 
         // --- Drag and Drop Handlers ---
-        function handleCardDragStart(e) { if (e.target.classList.contains('kanban-card')) { draggedCard = e.target; setTimeout(() => { if(draggedCard) draggedCard.classList.add('dragging'); }, 0); e.dataTransfer.setData('text/plain', e.target.id); e.dataTransfer.effectAllowed = 'move'; draggedColumn = null; } else { e.preventDefault(); } }
+        function handleCardDragStart(e) { if (e.target.classList.contains('kanban-card') && !e.target.querySelector('textarea')) { draggedCard = e.target; setTimeout(() => { if(draggedCard) draggedCard.classList.add('dragging'); }, 0); e.dataTransfer.setData('text/plain', e.target.id); e.dataTransfer.effectAllowed = 'move'; draggedColumn = null; } else { e.preventDefault(); } } // Added check for textarea
         function handleCardDragEnd(e) { if (draggedCard) draggedCard.classList.remove('dragging'); document.querySelectorAll('.cards-container.drag-over').forEach(el => el.classList.remove('drag-over')); draggedCard = null; }
         function handleCardDragOver(e) { if (!draggedCard) return; e.preventDefault(); const targetContainer = e.target.closest('.cards-container'); if (targetContainer) { e.dataTransfer.dropEffect = 'move'; targetContainer.classList.add('drag-over'); e.stopPropagation(); } else { e.dataTransfer.dropEffect = 'none'; } }
         function handleCardDragLeave(e) { if (!draggedCard) return; const targetContainer = e.target.closest('.cards-container'); if (targetContainer && (e.target === targetContainer || !targetContainer.contains(e.relatedTarget))) { targetContainer.classList.remove('drag-over'); } }
         function handleCardDrop(e) { if (!draggedCard) return; e.preventDefault(); const targetContainer = e.target.closest('.cards-container'); if (targetContainer) { e.stopPropagation(); targetContainer.classList.remove('drag-over'); const dropTargetCard = e.target.closest('.kanban-card'); if (dropTargetCard && dropTargetCard !== draggedCard) { targetContainer.insertBefore(draggedCard, dropTargetCard); } else if (!targetContainer.contains(draggedCard)) { targetContainer.appendChild(draggedCard); } saveBoardState(); } }
-        function handleColumnDragStart(e) { if (e.target.classList.contains('column-header')) { draggedColumn = e.target.closest('.kanban-column'); draggedCard = null; setTimeout(() => { if(draggedColumn) draggedColumn.classList.add('column-dragging'); }, 0); e.dataTransfer.setData('text/plain', draggedColumn.dataset.columnId); e.dataTransfer.effectAllowed = 'move'; } else { e.preventDefault(); } }
+        function handleColumnDragStart(e) { if (e.target.classList.contains('column-header') && !e.target.querySelector('input')) { draggedColumn = e.target.closest('.kanban-column'); draggedCard = null; setTimeout(() => { if(draggedColumn) draggedColumn.classList.add('column-dragging'); }, 0); e.dataTransfer.setData('text/plain', draggedColumn.dataset.columnId); e.dataTransfer.effectAllowed = 'move'; } else { e.preventDefault(); } } // Added check for input
         function handleColumnDragEnd(e) { if (draggedColumn) draggedColumn.classList.remove('column-dragging'); removeColumnPlaceholder(); draggedColumn = null; }
         function getDragAfterElement(container, x) { const draggableElements = [...container.querySelectorAll('.kanban-column:not(.column-dragging)')]; return draggableElements.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = x - box.left - box.width / 2; if (offset < 0 && offset > closest.offset) return { offset: offset, element: child }; else return closest; }, { offset: Number.NEGATIVE_INFINITY }).element; }
         function handleBoardDragOver(e) { if (!draggedColumn) { if (draggedCard) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; } return; } e.preventDefault(); e.dataTransfer.dropEffect = 'move'; const afterElement = getDragAfterElement(board, e.clientX); removeColumnPlaceholder(); insertColumnPlaceholder(afterElement); }
@@ -356,6 +479,8 @@
             board.addEventListener('dragover', handleBoardDragOver);
             board.addEventListener('drop', handleBoardDrop);
             board.addEventListener('dragleave', (e) => { if (!board.contains(e.relatedTarget)) removeColumnPlaceholder(); });
+
+            console.log("Board initialized."); // Add log to confirm initialization runs
         }
 
         // --- Run Initialization ---
@@ -364,4 +489,3 @@
     </script>
 </body>
 </html>
-
